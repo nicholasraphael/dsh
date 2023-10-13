@@ -1,9 +1,13 @@
-[workspace.package]
-edition = "2021"
-
 [workspace]
 members = [
   "dsh",
-  "ml-engine"
+  "ai-engine",
 ]
 resolver = "2"
+
+[workspace.package]
+edition = "2021"
+
+[workspace.dependencies]
+libc = "0.2.149"
+anyhow = "1.0.75"
