@@ -11,3 +11,4 @@ edition = "2021"
 [workspace.dependencies]
 libc = "0.2.149"
 anyhow = "1.0.75"
+regex = "1.10.1"

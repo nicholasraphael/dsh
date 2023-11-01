@@ -13,7 +13,9 @@ debug = false
 ai-engine = {path = "../ai-engine"}
 whoami = "1.4.1"
 ctrlc = "3.4.1"
-libc.workspace = true
-anyhow.workspace = true
 ratatui = "0.23.0"
 crossterm = "0.27.0"
+libc.workspace = true
+anyhow.workspace = true
+regex.workspace = true
+tokio = { version = "1.33.0", features = ["full"] }

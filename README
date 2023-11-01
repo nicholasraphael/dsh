@@ -1,0 +1,11 @@
+# AI shell assistant
+
+basic idea of an ai assistant in the shell
+
+Install rust
+
+```sh
+cargo build --release
+```
+
+run the binary at the target/relesae/dsh

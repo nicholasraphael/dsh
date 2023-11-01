@@ -20,6 +20,7 @@ pub enum Which {
     L34bCode,
     Mistral7b,
     Mistral7bInstruct,
+    RiftSolver
 }
 
 impl Which {
@@ -33,7 +34,8 @@ impl Which {
             | Self::L70bChat
             | Self::L7bCode
             | Self::L13bCode
-            | Self::L34bCode => false,
+            | Self::L34bCode 
+            | Self::RiftSolver => false,
             Self::Mistral7b | Self::Mistral7bInstruct => true,
         }
     }
@@ -88,9 +90,9 @@ impl Default for Args {
       Args {
           model: None,
           prompt: None,
-          sample_len: 150,
+          sample_len: 1500,
           tokenizer: None,
-          temperature: 0.8, 
+          temperature: 1.0, 
           top_p: None,
           seed: 299792458,
           tracing: false,
@@ -98,7 +100,7 @@ impl Default for Args {
           repeat_penalty: 1.1,
           repeat_last_n: 64,
           gqa: None,
-          which: Which::Mistral7bInstruct,
+          which: Which::L7bChat,
       }
   }
 }
@@ -152,6 +154,10 @@ impl Args {
                       "TheBloke/Mistral-7B-Instruct-v0.1-GGUF",
                       "mistral-7b-instruct-v0.1.Q4_K_S.gguf",
                   ),
+                  Which::RiftSolver => (
+                    "morph-labs/morph-prover-v0-7b-gguf",
+                    "gguf-model-Q8_0.gguf"
+                  )
               };
               let api = hf_hub::api::sync::Api::new()?;
               let api = api.model(repo.to_string());

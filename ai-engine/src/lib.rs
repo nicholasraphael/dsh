@@ -1,23 +1,35 @@
 mod args;
 mod utils;
+mod openai;
 
 use std::io::Write;
 
-use anyhow::{Error, Result, Ok};
+use anyhow::{Error, Ok, Result};
 use args::{Args, Prompt, Which};
+use futures_util::StreamExt;
+use serde_json::json;
+use serde::Deserialize;
 use utils::{format_size, print_token};
 
 use candle_core::quantized::{ggml_file, gguf_file};
 use candle_transformers::models::quantized_llama::{self as model, ModelWeights};
 
-use candle_core::{DType, Device, Tensor};
-use candle_nn::VarBuilder;
+use candle_core::{Device, Tensor};
 use candle_transformers::generation::LogitsProcessor;
-use tokenizers::Tokenizer;
+
+use crate::openai::ChatCompletionChunk;
+
+const SETUPPROMT: &'static str = r#"
+You are expert in programming and solving programming errors. You are to give a suggestion
+to the best of your ability to solve the following error given the following
+context. 
+
+Give code examples where useful:
+"#;
 
 pub struct AIEngine {
     model: ModelWeights,
-    args: Args
+    args: Args,
 }
 
 impl AIEngine {
@@ -67,7 +79,8 @@ impl AIEngine {
                     | Which::L13bChat
                     | Which::L7bCode
                     | Which::L13bCode
-                    | Which::L34bCode => 1,
+                    | Which::L34bCode
+                    | Which::RiftSolver => 1,
                     Which::Mistral7b | Which::Mistral7bInstruct | Which::L70b | Which::L70bChat => {
                         8
                     }
@@ -76,14 +89,82 @@ impl AIEngine {
             }
         };
         println!("model built");
-        return Ok(AIEngine { model, args: model_args.clone() });
+        return Ok(AIEngine {
+            model,
+            args: model_args.clone(),
+        });
+    }
+
+    pub async fn inference_openai(&mut self, prompt: &str) -> Result<(), Error> {
+        let final_prompt = format!("{} {}", SETUPPROMT, prompt);
+        let url = "https://api.openai.com/v1/chat/completions";
+        let api_key = std::env::var("OPENAI_API_KEY")?;
+
+        let body = json!({
+            "model": "gpt-3.5-turbo",
+            "messages": [{
+                "role": "user",
+                "content": final_prompt
+            }],
+            "stream": true
+        });
+        let client = reqwest::Client::new();
+        let res = client
+            .post(url)
+            .body(body.to_string())
+            .header("Content-Type", "application/json")
+            .bearer_auth(api_key)
+            .send()
+            .await?;
+        println!("status = {}", res.status());
+
+        println!("ChatGPT Says:");
+        println!();
+        let mut stream = res.bytes_stream();
+        while let Some(item) = stream.next().await {
+            let item = item?;
+            let s = match std::str::from_utf8(&item) {
+                std::result::Result::Ok(v) => v,
+                Err(e) => panic!("Invalid UTF-8 sequence: {}", e),
+            };
+
+            for p in s.split("\n\n") {
+                match p.strip_prefix("data: ") {
+                    Some(p) => {
+                        // Check if the stream is done...
+                        if p == "[DONE]" {
+                            break;
+                        }
+
+                        // Parse the json data...
+                        let d = serde_json::from_str::<ChatCompletionChunk>(p)
+                            .expect(format!("Couldn't parse: {}", p).as_str());
+
+                        // Is there data?
+                        let c = d.choices.get(0).expect("No choice returned");
+                        if let Some(content) = &c.delta.content {
+                            print!("{}", content);
+                        }
+
+                        // Flush stdout as it goes...
+                        if let Err(error) = std::io::stdout().flush() {
+                            panic!("{}", error);
+                        }
+                    }
+                    None => {}
+                }
+            }
+        }
+        println!("");
+        println!("[Done.]");
+        Ok(())
     }
 
     pub fn inference(&mut self, input: &str) -> Result<()> {
         self.args.prompt = Some(input.to_string());
         let prompt = match self.args.prompt.as_deref() {
-            Some(s) => Prompt::One(s.to_string()),
-            None => Prompt::One("Say you are a smart model in the computer shell".to_string())
+            Some(s) => Prompt::One(SETUPPROMT.to_owned() + s),
+            None => Prompt::One("Say you are a smart model in the computer shell".to_string()),
         };
 
         let mut pre_prompt_tokens = vec![];
@@ -142,7 +223,8 @@ impl AIEngine {
             };
             let mut all_tokens = vec![];
             let temperature = Some(self.args.temperature);
-            let mut logits_processor = LogitsProcessor::new(self.args.seed, temperature, self.args.top_p);
+            let mut logits_processor =
+                LogitsProcessor::new(self.args.seed, temperature, self.args.top_p);
 
             let start_prompt_processing = std::time::Instant::now();
             let mut next_token = {

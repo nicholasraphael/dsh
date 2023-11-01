@@ -3,25 +3,26 @@ mod internals;
 mod utils;
 
 use ai_engine::AIEngine;
+use internals::commands;
 
-use anyhow::Ok;
 use crossterm::{
     style::{Color, Print, ResetColor, SetForegroundColor},
     ExecutableCommand,
 };
 use std::{
-    env,
     io::{self, Write},
     process,
 };
 
 use utils::setup_workdir;
 
-fn main() -> anyhow::Result<()> {
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
     // Setup a Ctrl+C handler to ignore the signal
     ctrlc::set_handler(|| {}).expect("Error setting Ctrl+C handler");
 
     //  let mut error_output_map: HashMap<u32, String> = HashMap::new();
+    let mut ai_engine = AIEngine::default()?;
 
     let mut workdir = setup_workdir();
     loop {
@@ -60,8 +61,7 @@ fn main() -> anyhow::Result<()> {
                     todo!()
                 } else {
                     // Handle single commands
-                    //   let _ = execute_single_command(input, &error_output_map);
-                    todo!()
+                    commands::run_single_command(input, &mut ai_engine).await;
                 }
             }
         }
