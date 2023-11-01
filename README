@@ -9,3 +9,5 @@ cargo build --release
 ```
 
 run the binary at the target/relesae/dsh
+
+for open ai you need to export OPENAI_KEY as an environment variable
